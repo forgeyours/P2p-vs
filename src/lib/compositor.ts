@@ -68,6 +68,19 @@ export class StreamCompositor {
     video.playsInline = true;
     video.autoplay = true;
     video.setAttribute('referrerpolicy', 'no-referrer');
+
+    // To prevent Chrome/Android from suspending the video playback, we MUST append it to the DOM (hidden)
+    if (typeof document !== 'undefined') {
+      let container = document.getElementById('compositor-hidden-videos');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'compositor-hidden-videos';
+        container.setAttribute('style', 'position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0.001; overflow: hidden; pointer-events: none; z-index: -9999;');
+        document.body.appendChild(container);
+      }
+      container.appendChild(video);
+    }
+
     video.play().catch((err) => console.warn('Video playback deferred:', err));
 
     let sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -248,8 +261,16 @@ export class StreamCompositor {
     this.participants.forEach((p) => {
       p.videoEl.pause();
       p.videoEl.srcObject = null;
+      p.videoEl.remove();
     });
     this.participants.clear();
+
+    if (typeof document !== 'undefined') {
+      const container = document.getElementById('compositor-hidden-videos');
+      if (container) {
+        container.remove();
+      }
+    }
   }
 
   /**

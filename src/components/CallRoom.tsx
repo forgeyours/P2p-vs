@@ -370,6 +370,54 @@ export default function CallRoom({
     handlePeerDisconnect(peerId);
   };
 
+  const handleLeave = async () => {
+    const confirmLeave = window.confirm('Are you sure you want to leave the call?');
+    if (!confirmLeave) return;
+
+    // 1. Close all WebRTC peer connections
+    if (pcmRef.current) {
+      try {
+        pcmRef.current.closeAll();
+      } catch (err) {
+        console.error('Error closing peer connections:', err);
+      }
+    }
+
+    // 2. Stop all local media tracks
+    if (localStreamRef.current) {
+      try {
+        localStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+        });
+      } catch (err) {
+        console.error('Error stopping local tracks:', err);
+      }
+    }
+
+    // 3. Stop compositor if host
+    if (compositorRef.current) {
+      try {
+        compositorRef.current.stop();
+      } catch (err) {
+        console.error('Error stopping compositor:', err);
+      }
+    }
+
+    // 4. Remove self from the roster via API call
+    try {
+      await fetch('/api/roster/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, id: localId }),
+      });
+    } catch (err) {
+      console.error('Error removing self from roster:', err);
+    }
+
+    // 5. Navigate to Home
+    router.push('/');
+  };
+
   const handleOrientationToggle = () => {
     const nextO = orientation === 'landscape' ? 'portrait' : 'landscape';
     setOrientation(nextO);
@@ -736,9 +784,7 @@ export default function CallRoom({
             <h2 className="text-lg font-bold text-[#E0E0E6] tracking-tight uppercase font-mono">CODE: {roomId}</h2>
           </div>
           <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to leave the call?')) router.push('/');
-            }}
+            onClick={handleLeave}
             className="text-[10px] bg-red-950/30 hover:bg-red-900/30 border border-red-500/30 text-red-500 px-3.5 py-2 rounded font-bold font-mono uppercase tracking-widest transition-all cursor-pointer"
           >
             LEAVE
