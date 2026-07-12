@@ -1,67 +1,88 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PeerConnectionManager } from '@/src/lib/peerConnectionManager';
-import { StreamCompositor } from '@/src/lib/compositor';
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  Users,
+  Copy,
+  Check,
+  Radio,
+  Tv,
+  Youtube,
+  Smartphone,
+  Monitor,
+  Eye,
+  EyeOff,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Square,
+} from 'lucide-react';
 import { joinRoster, fetchRoster, pollSignals, kickParticipant } from '@/src/lib/signaling';
+import { PeerConnectionManager } from '../lib/peerConnectionManager';
+import { StreamCompositor } from '../lib/compositor';
 import BroadcastCanvas from './BroadcastCanvas';
 import GuestInvitePanel from './GuestInvitePanel';
 import MediaUploadPanel from './MediaUploadPanel';
 import LiveChatPanel from './LiveChatPanel';
-import { 
-  Video, VideoOff, Mic, MicOff, Users, 
-  Smartphone, Monitor, Play, Square, Eye, EyeOff, Trash2, 
-  Tv, Youtube, Radio, ChevronLeft, ChevronRight, Copy, Check 
-} from 'lucide-react';
 
 interface CallRoomProps {
   roomId: string;
   role: 'host' | 'guest';
   initialName: string;
-  initialVideo: boolean;
-  initialAudio: boolean;
+  initialVideo?: boolean;
+  initialAudio?: boolean;
 }
 
 export default function CallRoom({
   roomId,
   role,
   initialName,
-  initialVideo,
-  initialAudio,
+  initialVideo = true,
+  initialAudio = true,
 }: CallRoomProps) {
   const router = useRouter();
-
-  // Participant ID: persist in sessionStorage to survive tab refreshes
+  
   const [localId] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem(`peerId:${roomId}`);
-      if (stored && stored.startsWith(`${role}_`)) return stored;
-      const id = `${role}_${Math.random().toString(36).substring(2, 8)}`;
-      sessionStorage.setItem(`peerId:${roomId}`, id);
-      return id;
+    if (role === 'host') {
+      return `host_${Math.random().toString(36).substring(2, 8)}`;
+    } else {
+      return `guest_${Math.random().toString(36).substring(2, 8)}`;
     }
-    return '';
   });
 
-  const [localName] = useState(initialName || (role === 'host' ? 'Director (Host)' : 'Guest'));
+  const [localName] = useState(() => initialName || (role === 'host' ? 'Director' : 'Guest'));
+  const [hostSecret, setHostSecret] = useState('');
+
+  const [roster, setRoster] = useState<any[]>([]);
   const [videoOn, setVideoOn] = useState(initialVideo);
   const [audioOn, setAudioOn] = useState(initialAudio);
-  
-  // Media Devices
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  
-  // Roster & Layout States
-  const [roster, setRoster] = useState<any[]>([]);
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [broadcastMode, setBroadcastMode] = useState(false);
   const [installNote, setInstallNote] = useState(false);
 
-  // Host Action Toggles (Host only state)
+  // Host overlays/mixing states
   const [mutedPeers, setMutedPeers] = useState<string[]>([]);
   const [hiddenPeers, setHiddenPeers] = useState<string[]>([]);
 
-  // Media Share State
+  // YouTube RTMP synchronization states
+  const [ytConnected, setYtConnected] = useState(false);
+  const [ytLoading, setYtLoading] = useState(false);
+  const [ytTitle, setYtTitle] = useState(`${localName.toUpperCase()}'S MASTER FEED`);
+  const [ytDesc, setYtDesc] = useState(`LIVE P2P MESH BROADCAST VIA ROOM ${roomId}`);
+  const [broadcastId, setBroadcastId] = useState('');
+  const [liveChatId, setLiveChatId] = useState('');
+  const [rtmpUrl, setRtmpUrl] = useState('');
+  const [streamName, setStreamName] = useState('');
+  const [streamState, setStreamState] = useState<'idle' | 'created' | 'live' | 'completed'>('idle');
+  const [streamCopied, setStreamCopied] = useState(false);
+
+  // Shared media state
   const [activeMedia, setActiveMedia] = useState<{
     type: 'image' | 'video' | 'pdf';
     url: string;
@@ -69,140 +90,141 @@ export default function CallRoom({
     totalPages?: number;
   } | null>(null);
 
-  // YouTube Integration States
-  const [ytConnected, setYtConnected] = useState(false);
-  const [ytLoading, setYtLoading] = useState(false);
-  const [ytTitle, setYtTitle] = useState('My P2P Live Stream');
-  const [ytDesc, setYtDesc] = useState('Shared via MeshStream Live Production.');
-  const [broadcastId, setBroadcastId] = useState('');
-  const [liveChatId, setLiveChatId] = useState('');
-  const [rtmpUrl, setRtmpUrl] = useState('');
-  const [streamName, setStreamName] = useState('');
-  const [streamCopied, setStreamCopied] = useState(false);
-  const [streamState, setStreamState] = useState<'idle' | 'created' | 'live' | 'completed'>('idle');
-
-  // Refs for WebRTC / Compositor
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const compositorRef = useRef<StreamCompositor | null>(null);
-  const pcmRef = useRef<PeerConnectionManager | null>(null);
+  // WebRTC references
   const localStreamRef = useRef<MediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const pcmRef = useRef<PeerConnectionManager | null>(null);
+  const compositorRef = useRef<StreamCompositor | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Media Sharing Reference Elements
+  // Shared Media elements
   const sharedImageRef = useRef<HTMLImageElement | null>(null);
   const sharedVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pdfDocRef = useRef<any | null>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pdfDocRef = useRef<any>(null);
 
-  const hostSecret = typeof window !== 'undefined' ? localStorage.getItem(`hostSecret:${roomId}`) || '' : '';
-
-  // 1. Initial local camera & mic capture
+  // Fetch host secret if we are the host
   useEffect(() => {
-    async function initDevice() {
+    if (role === 'host') {
+      const sec = localStorage.getItem(`hostSecret:${roomId}`) || '';
+      setHostSecret(sec);
+    }
+  }, [role, roomId]);
+
+  // 1. Initialize local media capture
+  useEffect(() => {
+    async function initMedia() {
       try {
+        console.log('[WEBRTC DIAGNOSTIC] Requesting user media (video/audio)...');
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: true,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user',
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
         });
         localStreamRef.current = stream;
         setLocalStream(stream);
+        console.log('[WEBRTC DIAGNOSTIC] Local media capture successfully established.');
 
-        // Turn on/off according to initial settings
-        stream.getVideoTracks().forEach((t) => (t.enabled = videoOn));
-        stream.getAudioTracks().forEach((t) => (t.enabled = audioOn));
+        // Set initial track states based on preferences
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) videoTrack.enabled = videoOn;
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) audioTrack.enabled = audioOn;
 
-        // Setup compositor if Host
-        if (role === 'host' && canvasRef.current) {
-          const comp = new StreamCompositor(canvasRef.current);
-          comp.setOrientation(orientation);
-          comp.start();
-          comp.addParticipant(localId, localName, stream, true);
-          compositorRef.current = comp;
-        }
-
-        // Setup WebRTC connection manager
+        // Initialize WebRTC peer manager
         pcmRef.current = new PeerConnectionManager(roomId, localId, role);
+
+        // Register on roster
+        await joinRoster(roomId, localId, role, hostSecret);
       } catch (err) {
-        console.error('Failed to get media devices:', err);
-        alert('Please grant camera and microphone access permissions!');
+        console.error('[WEBRTC DIAGNOSTIC] Failed to get local user media / join roster:', err);
+        alert('Could not access camera or microphone. Please grant system permissions and try again.');
+        router.push('/');
       }
     }
 
-    initDevice();
+    if (role === 'guest' || (role === 'host' && hostSecret)) {
+      initMedia();
+    }
 
     return () => {
-      // Clean up on unmount
+      // Clean up media tracks on unmount
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      if (compositorRef.current) {
-        compositorRef.current.stop();
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (pcmRef.current) {
         pcmRef.current.closeAll();
       }
     };
-  }, []);
+  }, [roomId, localId, role, router, hostSecret]);
 
-  // 2. Continuous heartbeats, polling, and synchronization loops
+  // 1.1 Reactive StreamCompositor loop for Host
   useEffect(() => {
-    if (!localId) return;
+    if (role === 'host' && localStream && canvasRef.current) {
+      if (!compositorRef.current) {
+        console.log('[WEBRTC DIAGNOSTIC] Initializing host StreamCompositor loop...');
+        const comp = new StreamCompositor(canvasRef.current);
+        comp.addParticipant(localId, localName, localStream, true);
+        comp.start();
+        compositorRef.current = comp;
+      }
+    }
+    return () => {
+      if (compositorRef.current) {
+        compositorRef.current.stop();
+        compositorRef.current = null;
+      }
+    };
+  }, [role, localStream, canvasRef.current, localId, localName]);
 
-    // Heartbeat: registers or refreshes our presence in Vercel KV roster
+  // 2. Continuous background poll loop: Signaling + Roster + Heartbeat
+  useEffect(() => {
     const sendHeartbeat = async () => {
       await joinRoster(roomId, localId, role, hostSecret);
     };
 
-    // Sync Roster: gets the list of active members
     const syncRoster = async () => {
       const activeList = await fetchRoster(roomId);
-      setRoster(activeList);
+      if (activeList) {
+        setRoster(activeList);
 
-      // Check if we have been kicked from the roster (guests only)
-      if (role === 'guest') {
-        const stillInRoster = activeList.some((p) => p.id === localId);
-        if (!stillInRoster) {
-          // Keep heartbeats off and drop
-          return;
-        }
-      }
-
-      // Automatically spin up WebRTC connections to newly discovered peers
-      if (pcmRef.current && localStreamRef.current) {
+        // For any newly connected peer, initiate WebRTC peer connection
         activeList.forEach((peer) => {
-          if (peer.id === localId) return; // Skip self
+          if (peer.id === localId) return;
 
-          // If connection already exists, don't recreate it!
-          if (pcmRef.current!.hasConnection(peer.id)) return;
-
-          // Spectators are one-way from host only. Guests should skip spectators.
-          if (peer.role === 'spectator' && role !== 'host') {
+          // Check if we already have an active connection
+          if (pcmRef.current!.hasConnection(peer.id)) {
             return;
           }
 
-          // Lexicographical comparison rule or role rule to initiate
-          const isInitiator = pcmRef.current!.shouldInitiateOffer(peer.id, peer.role);
-          if (!isInitiator) return;
-
-          // Host can feed composited canvas stream to spectators
+          // If we should initiate the offer, create peer connection.
+          // Guests wait for hosts, hosts initiate immediately.
           const outStream = (role === 'host' && peer.role === 'spectator')
             ? compositorRef.current?.getCompositedStream() || localStreamRef.current
             : localStreamRef.current;
 
+          console.log(`[WEBRTC DIAGNOSTIC] syncRoster: Found unconnected peer ${peer.id} (${peer.role}). Creating Peer Connection.`);
           pcmRef.current!.createPeerConnection({
             peerId: peer.id,
             peerRole: peer.role,
             localStream: outStream,
             onTrack: (remoteStream) => {
-              console.log(`Received track from ${peer.id}`);
+              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from syncRoster for peerId=${peer.id}, streamId=${remoteStream.id}`);
               if (role === 'host' && compositorRef.current) {
-                // Host mixes guests dynamically into compositor canvas
+                console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${peer.id} to compositor`);
                 compositorRef.current.addParticipant(peer.id, peer.id, remoteStream);
               }
               // Both host and guest render raw remote videos
               attachRemoteVideo(peer.id, remoteStream);
             },
             onConnectionState: (state) => {
-              console.log(`Connection with ${peer.id} state: ${state}`);
+              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${peer.id} state from syncRoster: ${state}`);
               if (state === 'failed' || state === 'closed') {
                 pcmRef.current?.closePeer(peer.id);
                 handlePeerDisconnect(peer.id);
@@ -213,10 +235,10 @@ export default function CallRoom({
 
         // Clean up peer connections for members that have left
         const activeIds = new Set(activeList.map((p) => p.id));
-        const trackedIds = pcmRef.current.getActivePeerIds();
+        const trackedIds = pcmRef.current!.getActivePeerIds();
         trackedIds.forEach((pid) => {
           if (!activeIds.has(pid)) {
-            console.log(`Cleaning up left participant: ${pid}`);
+            console.log(`[WEBRTC DIAGNOSTIC] Cleaning up left participant: ${pid}`);
             pcmRef.current?.closePeer(pid);
             handlePeerDisconnect(pid);
           }
@@ -243,19 +265,23 @@ export default function CallRoom({
             ? compositorRef.current?.getCompositedStream() || localStreamRef.current
             : localStreamRef.current;
 
+          console.log(`[WEBRTC DIAGNOSTIC] Incoming signal from ${sig.from} (${sig.type})`);
           await pcmRef.current.handleSignal(
             sig.from,
             sig.type,
             sig.payload,
             outStream,
             (remoteStream) => {
+              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from handleSignal for peerId=${sig.from}, streamId=${remoteStream.id}`);
               if (role === 'host' && compositorRef.current) {
+                console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${sig.from} to compositor`);
                 compositorRef.current.addParticipant(sig.from, sig.from, remoteStream);
               }
               // Both host and guest render raw remote videos
               attachRemoteVideo(sig.from, remoteStream);
             },
             (state) => {
+              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${sig.from} state from handleSignal: ${state}`);
               if (state === 'failed' || state === 'closed') {
                 pcmRef.current?.closePeer(sig.from);
                 handlePeerDisconnect(sig.from);
@@ -267,22 +293,24 @@ export default function CallRoom({
       }
     };
 
-    // Run immediately, then interval
-    sendHeartbeat();
-    syncRoster();
+    if (role === 'guest' || (role === 'host' && hostSecret)) {
+      sendHeartbeat();
+      syncRoster();
 
-    const heartbeatTimer = setInterval(sendHeartbeat, 5000);
-    const rosterTimer = setInterval(syncRoster, 5000);
-    const signalingTimer = setInterval(pollInbox, 1200);
+      const heartbeatTimer = setInterval(sendHeartbeat, 5000);
+      const rosterTimer = setInterval(syncRoster, 5000);
+      const signalingTimer = setInterval(pollInbox, 1200);
 
-    return () => {
-      clearInterval(heartbeatTimer);
-      clearInterval(rosterTimer);
-      clearInterval(signalingTimer);
-    };
-  }, [localId, roster]);
+      return () => {
+        clearInterval(heartbeatTimer);
+        clearInterval(rosterTimer);
+        clearInterval(signalingTimer);
+      };
+    }
+  }, [localId, roster, roomId, role, hostSecret]);
 
   const handlePeerDisconnect = (peerId: string) => {
+    console.log(`[WEBRTC DIAGNOSTIC] handlePeerDisconnect called for peerId=${peerId}`);
     if (pcmRef.current) pcmRef.current.closePeer(peerId);
     if (compositorRef.current) compositorRef.current.removeParticipant(peerId);
     
@@ -292,8 +320,10 @@ export default function CallRoom({
   };
 
   const attachRemoteVideo = (peerId: string, stream: MediaStream) => {
+    console.log(`[WEBRTC DIAGNOSTIC] attachRemoteVideo called for peerId=${peerId}, streamId=${stream.id}, tracks count=${stream.getTracks().length}`);
     let el = document.getElementById(`video-${peerId}`) as HTMLVideoElement;
     if (!el) {
+      console.log(`[WEBRTC DIAGNOSTIC] Creating remote video element for peerId=${peerId}`);
       el = document.createElement('video');
       el.id = `video-${peerId}`;
       el.autoplay = true;
@@ -314,9 +344,13 @@ export default function CallRoom({
         container.appendChild(el);
         container.appendChild(label);
         grid.appendChild(container);
+      } else {
+        console.warn(`[WEBRTC DIAGNOSTIC] grid element 'remote-videos-grid' not found when trying to attach video for peerId=${peerId}`);
       }
     }
+    
     el.srcObject = stream;
+    console.log(`[WEBRTC DIAGNOSTIC] Assigned stream to video element for peerId=${peerId}`);
   };
 
   // 3. UI control triggers (Mute, Camera toggles)
@@ -892,7 +926,7 @@ export default function CallRoom({
                   <button
                     onClick={handlePdfNext}
                     disabled={activeMedia.currentPage === activeMedia.totalPages}
-                    className="p-1 px-2.5 bg-[#1A1A1E] hover:bg-[#232328] border border-white/10 text-white rounded disabled:opacity-30 cursor-pointer"
+                    className="p-1 px-2.5 bg-[#1A1A1E] hover:bg-[#232328] border border-white/10 text-[#E0E0E6] rounded disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
