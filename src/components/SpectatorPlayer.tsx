@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { pollSignals, joinRoster, sendSignal } from '@/src/lib/signaling';
 import { Tv, Radio, Eye, Volume2, ArrowLeft, Loader2 } from 'lucide-react';
+import { addLog } from '@/src/lib/logger';
+import DebugOverlay from './DebugOverlay';
 
 interface SpectatorPlayerProps {
   roomId: string;
@@ -37,6 +39,7 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
       const signals = await pollSignals(roomId, spectatorId);
       for (const sig of signals) {
         if (sig.from === 'system' && sig.type === 'kick') {
+          addLog('[WEBRTC DIAGNOSTIC] Spectator removed by director');
           alert('You have been removed from the room by the director!');
           router.push('/');
           return;
@@ -46,6 +49,7 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
       }
     };
 
+    addLog(`[WEBRTC DIAGNOSTIC] Spectator initialized with ID: ${spectatorId.toUpperCase()}`);
     sendHeartbeat();
     const heartbeatTimer = setInterval(sendHeartbeat, 5000);
     const pollingTimer = setInterval(pollInbox, 1200);
@@ -55,6 +59,7 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
       clearInterval(heartbeatTimer);
       clearInterval(pollingTimer);
       if (pcRef.current) {
+        addLog('[WEBRTC DIAGNOSTIC] Spectator cleaning up. Closing peer connection.');
         pcRef.current.close();
       }
     };
@@ -67,7 +72,10 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
   ) => {
     let pc = pcRef.current;
 
+    addLog(`[WEBRTC DIAGNOSTIC] Spectator handleIncomingSignal type=${type} from=${fromId}`);
+
     if (!pc) {
+      addLog(`[WEBRTC DIAGNOSTIC] Creating new RTCPeerConnection for spectator to host.`);
       pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
       });
@@ -75,18 +83,22 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
+          addLog(`[WEBRTC DIAGNOSTIC] Spectator generated ICE candidate for host.`);
           sendSignal(roomId, spectatorId, fromId, 'ice-candidate', e.candidate.toJSON());
         }
       };
 
       pc.oniceconnectionstatechange = () => {
         if (pc) {
+          addLog(`[WEBRTC DIAGNOSTIC] pc.oniceconnectionstatechange: state changed to ${pc.iceConnectionState}`);
           setConnState(pc.iceConnectionState);
         }
       };
 
       pc.ontrack = (e) => {
+        addLog(`[WEBRTC DIAGNOSTIC] pc.ontrack fired on spectator connection. Tracks length: ${e.track.kind}, streams: ${e.streams.length}`);
         if (e.streams && e.streams[0]) {
+          addLog(`[WEBRTC DIAGNOSTIC] Spectator received host media stream ID=${e.streams[0].id}`);
           setStream(e.streams[0]);
           if (videoRef.current) {
             videoRef.current.srcObject = e.streams[0];
@@ -97,46 +109,52 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
 
     if (type === 'offer') {
       try {
+        addLog(`[WEBRTC DIAGNOSTIC] Offer received from host. Current signalingState=${pc.signalingState}`);
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
+        addLog(`[WEBRTC DIAGNOSTIC] setRemoteDescription completed. Creating answer...`);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        addLog(`[WEBRTC DIAGNOSTIC] setLocalDescription completed. Sending answer back to host.`);
         await sendSignal(roomId, spectatorId, fromId, 'answer', answer);
 
         // Process any queued candidates
         const queue = iceQueueRef.current;
+        addLog(`[WEBRTC DIAGNOSTIC] Processing ${queue.length} queued ICE candidates...`);
         for (const candidate of queue) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
         iceQueueRef.current = [];
-      } catch (err) {
-        console.error('Failed to handle host offer:', err);
+      } catch (err: any) {
+        addLog(`[WEBRTC DIAGNOSTIC] Failed to handle host offer: ${err?.message || err}`, true);
         setError('Unable to establish connection with the director host.');
       }
     } else if (type === 'ice-candidate') {
       try {
         if (pc.remoteDescription && pc.remoteDescription.type) {
+          addLog('[WEBRTC DIAGNOSTIC] Adding host ICE candidate immediately.');
           await pc.addIceCandidate(new RTCIceCandidate(payload));
         } else {
+          addLog('[WEBRTC DIAGNOSTIC] Queueing host ICE candidate (remoteDescription not set yet).');
           iceQueueRef.current.push(payload);
         }
-      } catch (err) {
-        console.error('Failed to add candidate:', err);
+      } catch (err: any) {
+        addLog(`[WEBRTC DIAGNOSTIC] Failed to add candidate: ${err?.message || err}`, true);
       }
     }
   };
 
   const handleStartViewing = () => {
+    addLog('[WEBRTC DIAGNOSTIC] Initialized user interaction. Requesting stream video playback...');
     setNeedsClickToPlay(false);
     if (videoRef.current) {
-      videoRef.current.play().catch((e) => {
-        console.warn('Playback failed:', e);
-        // Fallback or request interaction again
+      videoRef.current.play().catch((e: any) => {
+        addLog(`[WEBRTC DIAGNOSTIC] Playback failed: ${e?.message || e}`, true);
       });
     }
   };
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-[#0A0A0C] flex flex-col justify-between p-4 md:p-6 overflow-hidden">
+    <div className="fixed inset-0 w-screen h-screen bg-[#0A0A0C] flex flex-col justify-between p-4 md:p-6 pb-16 overflow-hidden">
       {/* Mini top header bar */}
       <div className="flex justify-between items-center bg-[#121215] border border-white/10 px-4 py-3 rounded z-30">
         <button
@@ -211,6 +229,9 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
         <Radio className="w-3.5 h-3.5 text-red-500" />
         <span>100% SECURE MESH NETWORK. DIRECT RECIPIENT. NO CENTRAL RELAY SERVERS.</span>
       </div>
+
+      {/* Collapsible diagnostic overlay */}
+      <DebugOverlay />
     </div>
   );
 }

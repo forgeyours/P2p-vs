@@ -30,6 +30,8 @@ import BroadcastCanvas from './BroadcastCanvas';
 import GuestInvitePanel from './GuestInvitePanel';
 import MediaUploadPanel from './MediaUploadPanel';
 import LiveChatPanel from './LiveChatPanel';
+import { addLog } from '@/src/lib/logger';
+import DebugOverlay from './DebugOverlay';
 
 interface CallRoomProps {
   roomId: string;
@@ -65,6 +67,7 @@ export default function CallRoom({
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [broadcastMode, setBroadcastMode] = useState(false);
   const [installNote, setInstallNote] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Host overlays/mixing states
   const [mutedPeers, setMutedPeers] = useState<string[]>([]);
@@ -115,7 +118,7 @@ export default function CallRoom({
   useEffect(() => {
     async function initMedia() {
       try {
-        console.log('[WEBRTC DIAGNOSTIC] Requesting user media (video/audio)...');
+        addLog('[WEBRTC DIAGNOSTIC] Requesting user media (video/audio)...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: 1280 },
@@ -129,7 +132,7 @@ export default function CallRoom({
         });
         localStreamRef.current = stream;
         setLocalStream(stream);
-        console.log('[WEBRTC DIAGNOSTIC] Local media capture successfully established.');
+        addLog('[WEBRTC DIAGNOSTIC] Local media capture successfully established.');
 
         // Set initial track states based on preferences
         const videoTrack = stream.getVideoTracks()[0];
@@ -142,8 +145,8 @@ export default function CallRoom({
 
         // Register on roster
         await joinRoster(roomId, localId, role, hostSecret);
-      } catch (err) {
-        console.error('[WEBRTC DIAGNOSTIC] Failed to get local user media / join roster:', err);
+      } catch (err: any) {
+        addLog('[WEBRTC DIAGNOSTIC] Failed to get local user media / join roster: ' + (err?.message || err), true);
         alert('Could not access camera or microphone. Please grant system permissions and try again.');
         router.push('/');
       }
@@ -168,7 +171,7 @@ export default function CallRoom({
   useEffect(() => {
     if (role === 'host' && localStream && canvasRef.current) {
       if (!compositorRef.current) {
-        console.log('[WEBRTC DIAGNOSTIC] Initializing host StreamCompositor loop...');
+        addLog('[WEBRTC DIAGNOSTIC] Initializing host StreamCompositor loop...');
         const comp = new StreamCompositor(canvasRef.current);
         comp.addParticipant(localId, localName, localStream, true);
         comp.start();
@@ -209,22 +212,22 @@ export default function CallRoom({
             ? compositorRef.current?.getCompositedStream() || localStreamRef.current
             : localStreamRef.current;
 
-          console.log(`[WEBRTC DIAGNOSTIC] syncRoster: Found unconnected peer ${peer.id} (${peer.role}). Creating Peer Connection.`);
+          addLog(`[WEBRTC DIAGNOSTIC] syncRoster: Found unconnected peer ${peer.id} (${peer.role}). Creating Peer Connection.`);
           pcmRef.current!.createPeerConnection({
             peerId: peer.id,
             peerRole: peer.role,
             localStream: outStream,
             onTrack: (remoteStream) => {
-              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from syncRoster for peerId=${peer.id}, streamId=${remoteStream.id}`);
+              addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from syncRoster for peerId=${peer.id}, streamId=${remoteStream.id}`);
               if (role === 'host' && compositorRef.current) {
-                console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${peer.id} to compositor`);
+                addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${peer.id} to compositor`);
                 compositorRef.current.addParticipant(peer.id, peer.id, remoteStream);
               }
               // Both host and guest render raw remote videos
               attachRemoteVideo(peer.id, remoteStream);
             },
             onConnectionState: (state) => {
-              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${peer.id} state from syncRoster: ${state}`);
+              addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${peer.id} state from syncRoster: ${state}`);
               if (state === 'failed' || state === 'closed') {
                 pcmRef.current?.closePeer(peer.id);
                 handlePeerDisconnect(peer.id);
@@ -238,7 +241,7 @@ export default function CallRoom({
         const trackedIds = pcmRef.current!.getActivePeerIds();
         trackedIds.forEach((pid) => {
           if (!activeIds.has(pid)) {
-            console.log(`[WEBRTC DIAGNOSTIC] Cleaning up left participant: ${pid}`);
+            addLog(`[WEBRTC DIAGNOSTIC] Cleaning up left participant: ${pid}`);
             pcmRef.current?.closePeer(pid);
             handlePeerDisconnect(pid);
           }
@@ -265,23 +268,23 @@ export default function CallRoom({
             ? compositorRef.current?.getCompositedStream() || localStreamRef.current
             : localStreamRef.current;
 
-          console.log(`[WEBRTC DIAGNOSTIC] Incoming signal from ${sig.from} (${sig.type})`);
+          addLog(`[WEBRTC DIAGNOSTIC] Incoming signal from ${sig.from} (${sig.type})`);
           await pcmRef.current.handleSignal(
             sig.from,
             sig.type,
             sig.payload,
             outStream,
             (remoteStream) => {
-              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from handleSignal for peerId=${sig.from}, streamId=${remoteStream.id}`);
+              addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Received track from handleSignal for peerId=${sig.from}, streamId=${remoteStream.id}`);
               if (role === 'host' && compositorRef.current) {
-                console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${sig.from} to compositor`);
+                addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Adding participant ${sig.from} to compositor`);
                 compositorRef.current.addParticipant(sig.from, sig.from, remoteStream);
               }
               // Both host and guest render raw remote videos
               attachRemoteVideo(sig.from, remoteStream);
             },
             (state) => {
-              console.log(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${sig.from} state from handleSignal: ${state}`);
+              addLog(`[WEBRTC DIAGNOSTIC CALLBACK] Connection with ${sig.from} state from handleSignal: ${state}`);
               if (state === 'failed' || state === 'closed') {
                 pcmRef.current?.closePeer(sig.from);
                 handlePeerDisconnect(sig.from);
@@ -310,7 +313,7 @@ export default function CallRoom({
   }, [localId, roster, roomId, role, hostSecret]);
 
   const handlePeerDisconnect = (peerId: string) => {
-    console.log(`[WEBRTC DIAGNOSTIC] handlePeerDisconnect called for peerId=${peerId}`);
+    addLog(`[WEBRTC DIAGNOSTIC] handlePeerDisconnect called for peerId=${peerId}`);
     if (pcmRef.current) pcmRef.current.closePeer(peerId);
     if (compositorRef.current) compositorRef.current.removeParticipant(peerId);
     
@@ -320,10 +323,10 @@ export default function CallRoom({
   };
 
   const attachRemoteVideo = (peerId: string, stream: MediaStream) => {
-    console.log(`[WEBRTC DIAGNOSTIC] attachRemoteVideo called for peerId=${peerId}, streamId=${stream.id}, tracks count=${stream.getTracks().length}`);
+    addLog(`[WEBRTC DIAGNOSTIC] attachRemoteVideo called for peerId=${peerId}, streamId=${stream.id}, tracks count=${stream.getTracks().length}`);
     let el = document.getElementById(`video-${peerId}`) as HTMLVideoElement;
     if (!el) {
-      console.log(`[WEBRTC DIAGNOSTIC] Creating remote video element for peerId=${peerId}`);
+      addLog(`[WEBRTC DIAGNOSTIC] Creating remote video element for peerId=${peerId}`);
       el = document.createElement('video');
       el.id = `video-${peerId}`;
       el.autoplay = true;
@@ -345,12 +348,12 @@ export default function CallRoom({
         container.appendChild(label);
         grid.appendChild(container);
       } else {
-        console.warn(`[WEBRTC DIAGNOSTIC] grid element 'remote-videos-grid' not found when trying to attach video for peerId=${peerId}`);
+        addLog(`[WEBRTC DIAGNOSTIC] grid element 'remote-videos-grid' not found when trying to attach video for peerId=${peerId}`, true);
       }
     }
     
     el.srcObject = stream;
-    console.log(`[WEBRTC DIAGNOSTIC] Assigned stream to video element for peerId=${peerId}`);
+    addLog(`[WEBRTC DIAGNOSTIC] Assigned stream to video element for peerId=${peerId}`);
   };
 
   // 3. UI control triggers (Mute, Camera toggles)
@@ -404,52 +407,80 @@ export default function CallRoom({
     handlePeerDisconnect(peerId);
   };
 
-  const handleLeave = async () => {
-    const confirmLeave = window.confirm('Are you sure you want to leave the call?');
-    if (!confirmLeave) return;
+  const handleLeave = () => {
+    setShowLeaveModal(true);
+  };
+
+  const executeLeave = async () => {
+    setShowLeaveModal(false);
+    addLog('[SYSTEM ACTION] Starting executeLeave sequence...');
 
     // 1. Close all WebRTC peer connections
-    if (pcmRef.current) {
-      try {
+    try {
+      if (pcmRef.current) {
+        addLog('[SYSTEM ACTION] Closing all peer connections in pcmRef...');
         pcmRef.current.closeAll();
-      } catch (err) {
-        console.error('Error closing peer connections:', err);
+        addLog('[SYSTEM ACTION] Closed peer connections successfully.');
+      } else {
+        addLog('[SYSTEM ACTION] peerConnectionManager is not initialized.');
       }
+    } catch (err: any) {
+      addLog(`[SYSTEM ACTION] Error closing peer connections: ${err?.message || err}`, true);
     }
 
     // 2. Stop all local media tracks
-    if (localStreamRef.current) {
-      try {
+    try {
+      if (localStreamRef.current) {
+        addLog('[SYSTEM ACTION] Stopping local media tracks...');
         localStreamRef.current.getTracks().forEach((track) => {
-          track.stop();
+          try {
+            track.stop();
+            addLog(`[SYSTEM ACTION] Track stopped successfully: kind=${track.kind}`);
+          } catch (e: any) {
+            addLog(`[SYSTEM ACTION] Error stopping track ${track.kind}: ${e?.message || e}`, true);
+          }
         });
-      } catch (err) {
-        console.error('Error stopping local tracks:', err);
+        addLog('[SYSTEM ACTION] Stopped local media tracks successfully.');
+      } else {
+        addLog('[SYSTEM ACTION] localStreamRef is null, no tracks to stop.');
       }
+    } catch (err: any) {
+      addLog(`[SYSTEM ACTION] Error during track stopping: ${err?.message || err}`, true);
     }
 
     // 3. Stop compositor if host
-    if (compositorRef.current) {
-      try {
+    try {
+      if (compositorRef.current) {
+        addLog('[SYSTEM ACTION] Stopping stream compositor...');
         compositorRef.current.stop();
-      } catch (err) {
-        console.error('Error stopping compositor:', err);
+        addLog('[SYSTEM ACTION] Stopped stream compositor successfully.');
+      } else {
+        addLog('[SYSTEM ACTION] compositorRef is null, no compositor to stop.');
       }
+    } catch (err: any) {
+      addLog(`[SYSTEM ACTION] Error stopping compositor: ${err?.message || err}`, true);
     }
 
     // 4. Remove self from the roster via API call
     try {
-      await fetch('/api/roster/leave', {
+      addLog(`[SYSTEM ACTION] Removing self (${localId}) from room (${roomId}) roster...`);
+      const res = await fetch('/api/roster/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, id: localId }),
       });
-    } catch (err) {
-      console.error('Error removing self from roster:', err);
+      addLog(`[SYSTEM ACTION] Roster leave response status: ${res.status}`);
+    } catch (err: any) {
+      addLog(`[SYSTEM ACTION] Error removing self from roster: ${err?.message || err}`, true);
     }
 
     // 5. Navigate to Home
-    router.push('/');
+    try {
+      addLog('[SYSTEM ACTION] Navigating to homepage...');
+      router.push('/');
+    } catch (err: any) {
+      addLog(`[SYSTEM ACTION] Error routing to homepage: ${err?.message || err}`, true);
+    }
   };
 
   const handleOrientationToggle = () => {
@@ -738,7 +769,8 @@ export default function CallRoom({
 
   // 9. STANDARD MASTER CONTROLLER UI
   return (
-    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 md:p-6 bg-[#0A0A0C] max-w-7xl mx-auto">
+    <>
+      <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 md:p-6 bg-[#0A0A0C] max-w-7xl mx-auto">
       {/* LEFT FEED COLUMN: 7 Columns */}
       <div className="lg:col-span-7 flex flex-col gap-5">
         <div className="aspect-video w-full rounded overflow-hidden relative">
@@ -1048,5 +1080,34 @@ export default function CallRoom({
         )}
       </div>
     </main>
+    <DebugOverlay />
+    {showLeaveModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm font-mono">
+        <div className="w-full max-w-sm bg-[#121215] border border-white/10 rounded-lg p-5 shadow-2xl space-y-4">
+          <div className="space-y-1">
+            <span className="text-[10px] text-red-500 tracking-widest font-bold uppercase font-mono">TERMINATE CHANNELS</span>
+            <h3 className="text-sm font-bold text-[#E0E0E6] uppercase tracking-wider font-mono">CONFIRM DISCONNECTION?</h3>
+          </div>
+          <p className="text-[10px] text-white/50 leading-relaxed uppercase font-mono">
+            Leaving will shut down your active stream session, stop camera hardware, and unsubscribe you from the peer roster.
+          </p>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setShowLeaveModal(false)}
+              className="flex-1 bg-[#1A1A1E] hover:bg-[#232328] border border-white/10 text-[#E0E0E6] text-[10px] py-2 rounded font-bold uppercase tracking-wider cursor-pointer transition-colors font-mono"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={executeLeave}
+              className="flex-1 bg-red-600 hover:bg-red-500 text-white text-[10px] py-2 rounded font-bold uppercase tracking-wider cursor-pointer transition-colors font-mono"
+            >
+              DISCONNECT & LEAVE
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   );
 }
