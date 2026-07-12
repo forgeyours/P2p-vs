@@ -1,0 +1,6 @@
+{
+  "name": "P2P Mesh Video Call & Live Streaming",
+  "description": "A lightweight, direct browser-to-browser peer-to-peer video calling and live-stream compositing tool with host-level production controls.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
