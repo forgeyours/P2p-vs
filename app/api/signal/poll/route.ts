@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { redis } from '@/src/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
     const key = `room:${roomId}:signal:${id}`;
 
     // Get all signals
-    const signals = await kv.lrange(key, 0, -1);
+    const signals = await redis.lrange(key, 0, -1);
 
     if (signals && signals.length > 0) {
       // Clear mailbox atomically after reading
-      await kv.del(key);
+      await redis.del(key);
     }
 
     const parsedMessages = (signals || []).map((msg) => {
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ messages: parsedMessages });
   } catch (err) {
-    console.error('Error polling signals from KV:', err);
+    console.error('Error polling signals from Redis:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

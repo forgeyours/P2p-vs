@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { redis } from '@/src/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
@@ -17,12 +17,12 @@ export async function POST(req: NextRequest) {
     };
 
     // Push to list and set list expiry to 60s
-    await kv.rpush(key, JSON.stringify(message));
-    await kv.expire(key, 60);
+    await redis.rpush(key, JSON.stringify(message));
+    await redis.expire(key, 60);
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error('Error sending signal in KV:', err);
+    console.error('Error sending signal in Redis:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { redis } from '@/src/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 // POST: Add or update heartbeat for a participant
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
     // Security check: Only allow true hosts to join as host
     if (role === 'host') {
-      const storedSecret = await kv.get(`room:${roomId}:hostSecret`);
+      const storedSecret = await redis.get(`room:${roomId}:hostSecret`);
       if (!storedSecret || storedSecret !== hostSecret) {
         return NextResponse.json({ error: 'Unauthorized host role' }, { status: 401 });
       }
@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
     const setKey = `room:${roomId}:roster_ids`;
 
     // Save/refresh roster entry with 15-second expiration
-    await kv.set(rosterKey, { id, role, joinedAt: Date.now() }, { ex: 15 });
+    await redis.set(rosterKey, JSON.stringify({ id, role, joinedAt: Date.now() }), 'EX', 15);
     // Add to Set of member IDs
-    await kv.sadd(setKey, id);
+    await redis.sadd(setKey, id);
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     }
 
     const setKey = `room:${roomId}:roster_ids`;
-    const ids = await kv.smembers(setKey);
+    const ids = await redis.smembers(setKey);
 
     if (!ids || ids.length === 0) {
       return NextResponse.json({ roster: [] });
@@ -53,7 +53,15 @@ export async function GET(req: NextRequest) {
     // Retrieve active roster keys
     const entries = await Promise.all(
       ids.map(async (id) => {
-        const val = await kv.get(`room:${roomId}:roster:${id}`);
+        const raw = await redis.get(`room:${roomId}:roster:${id}`);
+        let val = null;
+        if (raw) {
+          try {
+            val = JSON.parse(raw);
+          } catch (e) {
+            console.error('Error parsing roster entry:', e);
+          }
+        }
         return { id, val };
       })
     );
@@ -71,7 +79,7 @@ export async function GET(req: NextRequest) {
 
     // Clean up expired entries in redis set asynchronously
     if (expiredIds.length > 0) {
-      await kv.srem(setKey, ...expiredIds);
+      await redis.srem(setKey, ...expiredIds);
     }
 
     return NextResponse.json({ roster: activeRoster });
