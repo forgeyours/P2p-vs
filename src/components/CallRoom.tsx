@@ -36,7 +36,7 @@ export default function CallRoom({
   const [localId] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem(`peerId:${roomId}`);
-      if (stored) return stored;
+      if (stored && stored.startsWith(`${role}_`)) return stored;
       const id = `${role}_${Math.random().toString(36).substring(2, 8)}`;
       sessionStorage.setItem(`peerId:${roomId}`, id);
       return id;
@@ -170,28 +170,41 @@ export default function CallRoom({
       if (pcmRef.current && localStreamRef.current) {
         activeList.forEach((peer) => {
           if (peer.id === localId) return; // Skip self
-          if (peer.role === 'spectator') return; // Spectator is one-way from host only
 
-          // Lexicographical comparison rule to initiate
+          // If connection already exists, don't recreate it!
+          if (pcmRef.current!.hasConnection(peer.id)) return;
+
+          // Spectators are one-way from host only. Guests should skip spectators.
+          if (peer.role === 'spectator' && role !== 'host') {
+            return;
+          }
+
+          // Lexicographical comparison rule or role rule to initiate
           const isInitiator = pcmRef.current!.shouldInitiateOffer(peer.id, peer.role);
+          if (!isInitiator) return;
+
+          // Host can feed composited canvas stream to spectators
+          const outStream = (role === 'host' && peer.role === 'spectator')
+            ? compositorRef.current?.getCompositedStream() || localStreamRef.current
+            : localStreamRef.current;
 
           pcmRef.current!.createPeerConnection({
             peerId: peer.id,
             peerRole: peer.role,
-            localStream: localStreamRef.current,
+            localStream: outStream,
             onTrack: (remoteStream) => {
               console.log(`Received track from ${peer.id}`);
               if (role === 'host' && compositorRef.current) {
                 // Host mixes guests dynamically into compositor canvas
                 compositorRef.current.addParticipant(peer.id, peer.id, remoteStream);
-              } else {
-                // Guest renders other guests locally
-                attachRemoteVideo(peer.id, remoteStream);
               }
+              // Both host and guest render raw remote videos
+              attachRemoteVideo(peer.id, remoteStream);
             },
             onConnectionState: (state) => {
               console.log(`Connection with ${peer.id} state: ${state}`);
               if (state === 'failed' || state === 'closed') {
+                pcmRef.current?.closePeer(peer.id);
                 handlePeerDisconnect(peer.id);
               }
             },
@@ -199,7 +212,15 @@ export default function CallRoom({
         });
 
         // Clean up peer connections for members that have left
-        const rosterIds = new Set(activeList.map((p) => p.id));
+        const activeIds = new Set(activeList.map((p) => p.id));
+        const trackedIds = pcmRef.current.getActivePeerIds();
+        trackedIds.forEach((pid) => {
+          if (!activeIds.has(pid)) {
+            console.log(`Cleaning up left participant: ${pid}`);
+            pcmRef.current?.closePeer(pid);
+            handlePeerDisconnect(pid);
+          }
+        });
       }
     };
 
@@ -230,12 +251,13 @@ export default function CallRoom({
             (remoteStream) => {
               if (role === 'host' && compositorRef.current) {
                 compositorRef.current.addParticipant(sig.from, sig.from, remoteStream);
-              } else {
-                attachRemoteVideo(sig.from, remoteStream);
               }
+              // Both host and guest render raw remote videos
+              attachRemoteVideo(sig.from, remoteStream);
             },
             (state) => {
               if (state === 'failed' || state === 'closed') {
+                pcmRef.current?.closePeer(sig.from);
                 handlePeerDisconnect(sig.from);
               }
             },

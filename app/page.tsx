@@ -25,7 +25,7 @@ export default function LobbyPage() {
         // Save host secret in client-side localStorage
         localStorage.setItem(`hostSecret:${data.roomId}`, data.hostSecret);
         // Direct to room page as host
-        router.push(`/room?roomId=${data.roomId}`);
+        router.push(`/room?roomId=${data.roomId}&role=host`);
       } else {
         throw new Error('Invalid response from server');
       }

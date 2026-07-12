@@ -22,22 +22,33 @@ export class PeerConnectionManager {
   ) {}
 
   /**
+   * Checks if we already have a connection for the specified peer.
+   */
+  public hasConnection(peerId: string): boolean {
+    return this.connections.has(peerId);
+  }
+
+  /**
    * Checks if we should initiate the offer based on our lexicographical rule or role.
    */
   public shouldInitiateOffer(
     peerId: string,
     peerRole: 'host' | 'guest' | 'spectator'
   ): boolean {
-    if (this.localRole === 'host' && peerRole === 'spectator') {
-      // Host always initiates connection to spectator
+    if (this.localRole === 'host' && (peerRole === 'guest' || peerRole === 'spectator')) {
+      // Host always initiates connection to guest/spectator
       return true;
     }
+    if (this.localRole === 'guest' && peerRole === 'host') {
+      // Guest never initiates to host (waits for host's offer)
+      return false;
+    }
     if (this.localRole === 'spectator' || peerRole === 'host') {
-      // Spectator never initiates; host connects to guest/spectator and lower ID handles guests
+      // Spectator never initiates; guest waits for host
       return false;
     }
 
-    // Guests <-> Guest or Host <-> Guest uses lexicographical comparison
+    // Guest <-> Guest uses lexicographical comparison
     return this.localId < peerId;
   }
 
@@ -184,6 +195,13 @@ export class PeerConnectionManager {
         console.error('Error adding ICE candidate:', err);
       }
     }
+  }
+
+  /**
+   * Retrieves all currently connected peer IDs.
+   */
+  public getActivePeerIds(): string[] {
+    return Array.from(this.connections.keys());
   }
 
   /**
