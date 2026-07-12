@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     // Retrieve active roster keys
     const entries = await Promise.all(
-      ids.map(async (id) => {
+      ids.map(async (id: string) => {
         const raw = await redis.get(`room:${roomId}:roster:${id}`);
         let val = null;
         if (raw) {

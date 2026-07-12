@@ -1,10 +1,17 @@
-import { kv } from '@vercel/kv';
+import { redis } from '@/src/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 async function getValidAccessToken(roomId: string): Promise<string> {
-  const tokens: any = await kv.get(`room:${roomId}:youtubeTokens`);
-  if (!tokens) {
+  const raw = await redis.get(`room:${roomId}:youtubeTokens`);
+  if (!raw) {
     throw new Error('請先授權連結 YouTube 帳號');
+  }
+
+  let tokens: any;
+  try {
+    tokens = JSON.parse(raw);
+  } catch (e) {
+    throw new Error('解析 YouTube 憑證失敗');
   }
 
   const clientId = process.env.YOUTUBE_CLIENT_ID;
@@ -31,7 +38,7 @@ async function getValidAccessToken(roomId: string): Promise<string> {
           ...tokens,
           ...refreshed,
         };
-        await kv.set(`room:${roomId}:youtubeTokens`, updatedTokens, { ex: 21600 });
+        await redis.set(`room:${roomId}:youtubeTokens`, JSON.stringify(updatedTokens), 'EX', 21600);
         return updatedTokens.access_token;
       }
     } catch (e) {

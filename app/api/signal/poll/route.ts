@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       await redis.del(key);
     }
 
-    const parsedMessages = (signals || []).map((msg) => {
+    const parsedMessages = (signals || []).map((msg: string) => {
       if (typeof msg === 'string') {
         try {
           return JSON.parse(msg);

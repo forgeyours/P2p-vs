@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { redis } from '@/src/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
 
     const tokens = await response.json();
 
-    // Store tokens in Vercel KV with 6-hour TTL
-    await kv.set(`room:${roomId}:youtubeTokens`, tokens, { ex: 21600 });
+    // Store tokens in Redis with 6-hour TTL
+    await redis.set(`room:${roomId}:youtubeTokens`, JSON.stringify(tokens), 'EX', 21600);
 
     // Return simple HTML page to notify parent and close popup
     return new NextResponse(
