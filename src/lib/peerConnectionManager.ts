@@ -153,6 +153,15 @@ export class PeerConnectionManager {
         await pc.setLocalDescription(offer);
         addLog(`[WEBRTC DIAGNOSTIC] Sending offer to peerId=${peerId}, state after=${pc.signalingState}`);
         await sendSignal(this.roomId, this.localId, peerId, 'offer', offer);
+
+        // Watchdog: if we sent an offer but the peer never answered (signal
+        // missed due to a dropped poll, backgrounded tab, etc.), resend it once.
+        setTimeout(() => {
+          if (pc.signalingState === 'have-local-offer' && pc.connectionState !== 'closed') {
+            addLog(`[WEBRTC DIAGNOSTIC] No answer received from peerId=${peerId} after 10s. Resending offer.`);
+            sendSignal(this.roomId, this.localId, peerId, 'offer', offer);
+          }
+        }, 10000);
       } catch (err: any) {
         addLog(`[WEBRTC DIAGNOSTIC] Error creating/sending offer for ${peerId}: ${err?.message || err}`, true);
       }

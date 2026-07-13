@@ -93,12 +93,14 @@ export async function pollSignals(
   try {
     const res = await fetch(`/api/signal/poll?roomId=${roomId}&id=${participantId}`);
     if (!res.ok) {
+      const errorText = await res.text();
+      addLog(`[WEBRTC DIAGNOSTIC ERROR] pollSignals: request failed with status ${res.status}: ${errorText}`, true);
       return [];
     }
-    const data = await safeParseJson(res);
+    const data = await res.json();
     return data.messages || [];
-  } catch (err) {
-    console.error('Error polling signals', err);
+  } catch (err: any) {
+    addLog(`[WEBRTC DIAGNOSTIC ERROR] pollSignals: network/unexpected error: ${err?.message || err}`, true);
     return [];
   }
 }

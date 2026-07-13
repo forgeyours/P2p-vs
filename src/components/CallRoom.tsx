@@ -353,10 +353,21 @@ export default function CallRoom({
       const rosterTimer = setInterval(syncRoster, 5000);
       const signalingTimer = setInterval(pollInbox, 1200);
 
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          addLog('[WEBRTC DIAGNOSTIC] Tab became visible again. Forcing immediate resync.');
+          sendHeartbeat();
+          syncRoster();
+          pollInbox();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
       return () => {
         clearInterval(heartbeatTimer);
         clearInterval(rosterTimer);
         clearInterval(signalingTimer);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
   }, [localId, roster, roomId, role, hostSecret]);
