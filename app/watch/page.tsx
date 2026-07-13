@@ -2,10 +2,12 @@
 
 import React, { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
+
+export const dynamic = 'force-dynamic';
 
 // Dynamically import SpectatorPlayer with SSR disabled
-const SpectatorPlayer = dynamic(() => import('@/src/components/SpectatorPlayer'), {
+const SpectatorPlayer = nextDynamic(() => import('@/src/components/SpectatorPlayer'), {
   ssr: false,
 });
 

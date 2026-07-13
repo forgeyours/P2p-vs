@@ -1,3 +1,5 @@
+import { addLog } from './logger';
+
 export interface RosterEntry {
   id: string;
   role: 'host' | 'guest' | 'spectator';
@@ -28,12 +30,17 @@ export async function joinRoster(
       body: JSON.stringify({ roomId, id: participantId, role, hostSecret }),
     });
     if (!res.ok) {
-      console.error('Failed to join/heartbeat roster', await res.text());
+      const errorText = await res.text();
+      const warnMsg = `[WEBRTC DIAGNOSTIC ERROR] joinRoster: Heartbeat failed with status ${res.status}: ${errorText}`;
+      console.error(warnMsg);
+      addLog(warnMsg, true);
       return false;
     }
     return true;
-  } catch (err) {
-    console.error('Error joining roster', err);
+  } catch (err: any) {
+    const errMsg = `[WEBRTC DIAGNOSTIC ERROR] joinRoster: Network/unexpected error during heartbeat: ${err?.message || err}`;
+    console.error(errMsg);
+    addLog(errMsg, true);
     return false;
   }
 }

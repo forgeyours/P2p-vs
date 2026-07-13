@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import JoinForm from '@/src/components/JoinForm';
 import { Radio, Plus, Settings2, ShieldCheck, Film } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function LobbyPage() {
   const router = useRouter();
   const [creating, setCreating] = useState(false);

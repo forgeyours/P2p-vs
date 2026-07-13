@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
     const rosterKey = `room:${roomId}:roster:${id}`;
     const setKey = `room:${roomId}:roster_ids`;
 
-    // Save/refresh roster entry with 15-second expiration
-    await redis.set(rosterKey, JSON.stringify({ id, role, joinedAt: Date.now() }), 'EX', 15);
+    // Save/refresh roster entry with 30-second expiration
+    await redis.set(rosterKey, JSON.stringify({ id, role, joinedAt: Date.now() }), 'EX', 30);
     // Add to Set of member IDs
     await redis.sadd(setKey, id);
 

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Video, VideoOff, Mic, MicOff, Play, ArrowLeft } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 function JoinContent() {
   const router = useRouter();
   const searchParams = useSearchParams();

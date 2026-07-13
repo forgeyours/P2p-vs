@@ -99,6 +99,7 @@ export default function CallRoom({
   const pcmRef = useRef<PeerConnectionManager | null>(null);
   const compositorRef = useRef<StreamCompositor | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const missingCountRef = useRef<Record<string, number>>({});
 
   // Shared Media elements
   const sharedImageRef = useRef<HTMLImageElement | null>(null);
@@ -203,6 +204,10 @@ export default function CallRoom({
 
           // Check if we already have an active connection
           if (pcmRef.current!.hasConnection(peer.id)) {
+            // Reset counter since we are connected to them and they are in the active roster
+            if (missingCountRef.current[peer.id]) {
+              delete missingCountRef.current[peer.id];
+            }
             return;
           }
 
@@ -246,14 +251,26 @@ export default function CallRoom({
           });
         });
 
-        // Clean up peer connections for members that have left
+        // Clean up peer connections for members that have left, with grace mechanism
         const activeIds = new Set(activeList.map((p) => p.id));
         const trackedIds = pcmRef.current!.getActivePeerIds();
         trackedIds.forEach((pid) => {
           if (!activeIds.has(pid)) {
-            addLog(`[WEBRTC DIAGNOSTIC] Cleaning up left participant: ${pid}`);
-            pcmRef.current?.closePeer(pid);
-            handlePeerDisconnect(pid);
+            const currentCount = (missingCountRef.current[pid] || 0) + 1;
+            missingCountRef.current[pid] = currentCount;
+            if (currentCount >= 3) {
+              addLog(`[WEBRTC DIAGNOSTIC] Cleaning up left participant (missing ${currentCount} consecutive roster checks): ${pid}`);
+              pcmRef.current?.closePeer(pid);
+              handlePeerDisconnect(pid);
+              delete missingCountRef.current[pid];
+            } else {
+              addLog(`[WEBRTC DIAGNOSTIC] Participant ${pid} missing from roster (consecutive count: ${currentCount}/3). Deferring cleanup.`);
+            }
+          } else {
+            // Reset counter since peer is present in the active roster
+            if (missingCountRef.current[pid]) {
+              delete missingCountRef.current[pid];
+            }
           }
         });
       }

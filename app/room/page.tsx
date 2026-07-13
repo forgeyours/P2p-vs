@@ -2,10 +2,12 @@
 
 import React, { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
+
+export const dynamic = 'force-dynamic';
 
 // Dynamically import CallRoom with SSR disabled
-const CallRoom = dynamic(() => import('@/src/components/CallRoom'), {
+const CallRoom = nextDynamic(() => import('@/src/components/CallRoom'), {
   ssr: false,
 });
 

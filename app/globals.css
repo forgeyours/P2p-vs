@@ -3,6 +3,21 @@
 @theme {
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  
+  --color-studio-bg: #0A0A0C;
+  --color-studio-card: #121215;
+  --color-studio-border: rgba(255, 255, 255, 0.08);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-studio-bg);
+    background-image: radial-gradient(circle at 50% 50%, rgba(255, 107, 0, 0.04) 0%, transparent 80%),
+                      linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px);
+    background-size: 100% 100%, 24px 24px, 24px 24px;
+    background-attachment: fixed;
+  }
 }
 
 @layer utilities {
@@ -12,5 +27,82 @@
   .scrollbar-none {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Custom sleek scrollbar for panels */
+  .studio-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .studio-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .studio-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+  }
+  .studio-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Studio HUD / Glass / Glow Effects */
+  .studio-glass {
+    background: rgba(18, 18, 21, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glow-red {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 15px rgba(249, 115, 22, 0.35);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+
+  /* Video HUD corners / safe area markings */
+  .hud-corner-tl {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid rgba(255, 255, 255, 0.4);
+    border-left: 2px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .hud-corner-tr {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid rgba(255, 255, 255, 0.4);
+    border-right: 2px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .hud-corner-bl {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    width: 8px;
+    height: 8px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.4);
+    border-left: 2px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .hud-corner-br {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.4);
+    border-right: 2px solid rgba(255, 255, 255, 0.4);
   }
 }
