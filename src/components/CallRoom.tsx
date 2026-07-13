@@ -686,6 +686,11 @@ export default function CallRoom({
     setYtLoading(true);
     try {
       const res = await fetch(`/api/youtube/authorize?roomId=${roomId}`);
+      const contentType = res.headers.get('content-type');
+      if (!res.ok || !contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (data.url) {
         // Open Google OAuth direct popup
@@ -704,8 +709,9 @@ export default function CallRoom({
           alert('Popup blocked by browser! Please allow popups to authorize your Google Account.');
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to link YouTube', e);
+      alert(`連結 YouTube 失敗: ${e.message || e}`);
     } finally {
       setYtLoading(false);
     }
@@ -735,7 +741,22 @@ export default function CallRoom({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, title: ytTitle, description: ytDesc }),
       });
-      if (!res.ok) throw new Error('Failed to create broadcast');
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+      if (!res.ok) {
+        let errMsg = 'Failed to create broadcast';
+        if (isJson) {
+          const d = await res.json();
+          errMsg = d.error || errMsg;
+        } else {
+          const text = await res.text();
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
+      }
+      if (!isJson) {
+        throw new Error('Invalid server response format');
+      }
       const data = await res.json();
 
       setBroadcastId(data.broadcastId);
@@ -758,7 +779,19 @@ export default function CallRoom({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, broadcastId, status: target }),
       });
-      if (!res.ok) throw new Error('Failed to transition broadcast state');
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+      if (!res.ok) {
+        let errMsg = 'Failed to transition broadcast state';
+        if (isJson) {
+          const d = await res.json();
+          errMsg = d.error || errMsg;
+        } else {
+          const text = await res.text();
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
+      }
       
       if (target === 'live') {
         setStreamState('live');

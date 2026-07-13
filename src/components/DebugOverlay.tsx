@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { subscribe, addLog } from '@/src/lib/logger';
-import { Terminal, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { Terminal, ChevronUp, ChevronDown, Trash2, Copy, Check } from 'lucide-react';
 
 export default function DebugOverlay() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,6 +24,18 @@ export default function DebugOverlay() {
     }
   }, [logs, isOpen]);
 
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (logs.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(logs.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy logs to clipboard:', err);
+    }
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#121215] border-t border-white/15 shadow-[0_-5px_15px_rgba(0,0,0,0.5)] font-mono text-xs select-none">
       {/* Control bar */}
@@ -35,6 +48,22 @@ export default function DebugOverlay() {
           <span className="text-[10px] uppercase tracking-widest font-semibold font-mono">ON-SCREEN WEBRTC & SIGNAL DIAGNOSTICS ({logs.length})</span>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={handleCopy}
+            disabled={logs.length === 0}
+            className={`p-1 rounded cursor-pointer transition-colors ${
+              logs.length === 0 
+                ? 'text-white/20 cursor-not-allowed' 
+                : 'text-white/40 hover:text-emerald-400'
+            }`}
+            title="Copy diagnostics to clipboard"
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+          </button>
           <button 
             onClick={(e) => {
               e.stopPropagation();

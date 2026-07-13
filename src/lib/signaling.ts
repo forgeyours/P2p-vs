@@ -13,6 +13,19 @@ export interface SignalingMessage {
 }
 
 /**
+ * Safely parses the JSON response, returning a fallback or throwing a clean error
+ * if the content-type is not JSON (e.g., HTML from 404/500 errors).
+ */
+async function safeParseJson(res: Response): Promise<any> {
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return res.json();
+  }
+  const text = await res.text();
+  throw new Error(text || `Response status ${res.status}`);
+}
+
+/**
  * Registers or sends a heartbeat for a participant in the room roster.
  */
 export async function joinRoster(
@@ -82,7 +95,7 @@ export async function pollSignals(
     if (!res.ok) {
       return [];
     }
-    const data = await res.json();
+    const data = await safeParseJson(res);
     return data.messages || [];
   } catch (err) {
     console.error('Error polling signals', err);
@@ -99,7 +112,7 @@ export async function fetchRoster(roomId: string): Promise<RosterEntry[]> {
     if (!res.ok) {
       return [];
     }
-    const data = await res.json();
+    const data = await safeParseJson(res);
     return data.roster || [];
   } catch (err) {
     console.error('Error fetching roster', err);

@@ -19,9 +19,26 @@ export default function LobbyPage() {
       const res = await fetch('/api/room/create', {
         method: 'POST',
       });
+
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+
       if (!res.ok) {
-        throw new Error('Server failed to create room');
+        let errMsg = 'Server failed to create room';
+        if (isJson) {
+          const d = await res.json();
+          errMsg = d.error || errMsg;
+        } else {
+          const text = await res.text();
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
       }
+
+      if (!isJson) {
+        throw new Error('Server returned invalid response format');
+      }
+
       const data = await res.json();
       if (data.roomId && data.hostSecret) {
         // Save host secret in client-side localStorage

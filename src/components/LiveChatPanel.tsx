@@ -36,9 +36,23 @@ export default function LiveChatPanel({ roomId, liveChatId }: LiveChatPanelProps
       }
 
       const res = await fetch(url);
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Unable to retrieve chat logs');
+        let errMsg = 'Unable to retrieve chat logs';
+        if (isJson) {
+          const data = await res.json();
+          errMsg = data.error || errMsg;
+        } else {
+          const text = await res.text();
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
+      }
+
+      if (!isJson) {
+        throw new Error('Server returned invalid response type');
       }
 
       const data = await res.json();

@@ -52,9 +52,23 @@ export default function MediaUploadPanel({
         body: formData,
       });
 
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+
       if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Upload failed');
+        let errMsg = 'Upload failed';
+        if (isJson) {
+          const d = await res.json();
+          errMsg = d.error || errMsg;
+        } else {
+          const text = await res.text();
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
+      }
+
+      if (!isJson) {
+        throw new Error('Server returned invalid response type');
       }
 
       const data = await res.json();
