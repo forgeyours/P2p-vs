@@ -208,9 +208,19 @@ export default function CallRoom({
 
           // If we should initiate the offer, create peer connection.
           // Guests wait for hosts, hosts initiate immediately.
-          const outStream = (role === 'host' && peer.role === 'spectator')
-            ? compositorRef.current?.getCompositedStream() || localStreamRef.current
-            : localStreamRef.current;
+          let outStream = localStreamRef.current;
+          if (role === 'host' && peer.role === 'spectator') {
+            if (!compositorRef.current || !compositorRef.current.isRunning()) {
+              addLog(`[WEBRTC DIAGNOSTIC] syncRoster: Deferring peer connection with spectator ${peer.id} because compositor is not running yet.`);
+              return; // Wait for next sync roster tick
+            }
+            try {
+              outStream = compositorRef.current.getCompositedStream();
+            } catch (err: any) {
+              addLog(`[WEBRTC DIAGNOSTIC ERROR] syncRoster: Failed to get compositor stream for spectator ${peer.id}: ${err?.message || err}`, true);
+              return; // Wait for next sync roster tick
+            }
+          }
 
           addLog(`[WEBRTC DIAGNOSTIC] syncRoster: Found unconnected peer ${peer.id} (${peer.role}). Creating Peer Connection.`);
           pcmRef.current!.createPeerConnection({
@@ -264,9 +274,18 @@ export default function CallRoom({
           const peerRole = peer ? peer.role : 'guest';
 
           // Host can feed composited canvas stream to spectators
-          const outStream = (role === 'host' && peerRole === 'spectator')
-            ? compositorRef.current?.getCompositedStream() || localStreamRef.current
-            : localStreamRef.current;
+          let outStream = localStreamRef.current;
+          if (role === 'host' && peerRole === 'spectator') {
+            if (!compositorRef.current || !compositorRef.current.isRunning()) {
+              addLog(`[WEBRTC DIAGNOSTIC] pollInbox: Compositor is not running yet for signal from spectator ${sig.from}. Falling back to localStream.`);
+            } else {
+              try {
+                outStream = compositorRef.current.getCompositedStream();
+              } catch (err: any) {
+                addLog(`[WEBRTC DIAGNOSTIC ERROR] pollInbox: Failed to get compositor stream for spectator signal from ${sig.from}: ${err?.message || err}`, true);
+              }
+            }
+          }
 
           addLog(`[WEBRTC DIAGNOSTIC] Incoming signal from ${sig.from} (${sig.type})`);
           await pcmRef.current.handleSignal(

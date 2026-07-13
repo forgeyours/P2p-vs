@@ -1,4 +1,5 @@
 import { computeLayout, ParticipantInfo, ActiveMedia } from './computeLayout';
+import { addLog } from './logger';
 
 export class StreamCompositor {
   private canvas: HTMLCanvasElement;
@@ -274,10 +275,35 @@ export class StreamCompositor {
   }
 
   /**
+   * Checks if the compositor loop is active and the canvas is fully sized.
+   */
+  public isRunning(): boolean {
+    return this.frameId !== null && this.canvas.width > 0 && this.canvas.height > 0;
+  }
+
+  /**
    * Returns the combined composited MediaStream.
    */
   public getCompositedStream(): MediaStream {
-    const videoTracks = this.canvas.captureStream(30).getVideoTracks();
+    let videoTracks = this.canvas.captureStream(30).getVideoTracks();
+    const logMsg = `[WEBRTC DIAGNOSTIC] getCompositedStream: canvas.width=${this.canvas.width}, canvas.height=${this.canvas.height}, videoTracks.length=${videoTracks.length}`;
+    console.log(logMsg);
+    addLog(logMsg);
+
+    if (videoTracks.length === 0) {
+      const warnMsg = `[WEBRTC DIAGNOSTIC WARNING] getCompositedStream: 0 video tracks returned! Canvas might not be fully initialized or visible yet. Attempting instant capture retry...`;
+      console.warn(warnMsg);
+      addLog(warnMsg, true);
+
+      // Instant retry
+      videoTracks = this.canvas.captureStream(30).getVideoTracks();
+      if (videoTracks.length === 0) {
+        const errMsg = `[WEBRTC DIAGNOSTIC ERROR] getCompositedStream: Failed to capture video track after retry. Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`;
+        console.error(errMsg);
+        addLog(errMsg, true);
+        throw new Error(errMsg);
+      }
+    }
 
     // Ensure we have a dummy fallback audio track if Web Audio failed to load
     let audioTracks: MediaStreamTrack[] = [];
