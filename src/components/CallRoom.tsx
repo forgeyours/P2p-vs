@@ -202,6 +202,11 @@ export default function CallRoom({
         activeList.forEach((peer) => {
           if (peer.id === localId) return;
 
+          // Only the HOST is allowed to connect to spectators. If a guest or
+          // another spectator tries to also negotiate with a spectator, it will
+          // corrupt the spectator's single shared RTCPeerConnection. Skip entirely.
+          if (peer.role === 'spectator' && role !== 'host') return;
+
           // Check if we already have an active connection
           if (pcmRef.current!.hasConnection(peer.id)) {
             // Reset counter since we are connected to them and they are in the active roster
@@ -289,6 +294,14 @@ export default function CallRoom({
         if (pcmRef.current) {
           const peer = roster.find((p) => p.id === sig.from);
           const peerRole = peer ? peer.role : 'guest';
+
+          // Same rule as syncRoster: only the host talks to spectators. If this
+          // client isn't the host, drop any signal that claims to be from/about
+          // a spectator rather than letting it corrupt a peer connection.
+          if (peerRole === 'spectator' && role !== 'host') {
+            addLog(`[WEBRTC DIAGNOSTIC] Ignoring stray spectator signal from ${sig.from} (local role is ${role}, not host)`);
+            continue;
+          }
 
           // Host can feed composited canvas stream to spectators
           let outStream = localStreamRef.current;
