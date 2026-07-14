@@ -91,7 +91,9 @@ export async function pollSignals(
   participantId: string
 ): Promise<SignalingMessage[]> {
   try {
-    const res = await fetch(`/api/signal/poll?roomId=${roomId}&id=${participantId}`);
+    const res = await fetch(`/api/signal/poll?roomId=${roomId}&id=${participantId}`, {
+      cache: 'no-store',
+    });
     if (!res.ok) {
       const errorText = await res.text();
       addLog(`[WEBRTC DIAGNOSTIC ERROR] pollSignals: request failed with status ${res.status}: ${errorText}`, true);
@@ -110,7 +112,9 @@ export async function pollSignals(
  */
 export async function fetchRoster(roomId: string): Promise<RosterEntry[]> {
   try {
-    const res = await fetch(`/api/roster/join?roomId=${roomId}`);
+    const res = await fetch(`/api/roster/join?roomId=${roomId}`, {
+      cache: 'no-store',
+    });
     if (!res.ok) {
       return [];
     }

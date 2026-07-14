@@ -46,8 +46,14 @@ export async function GET(req: NextRequest) {
     const setKey = `room:${roomId}:roster_ids`;
     const ids = await redis.smembers(setKey);
 
+    const noCacheHeaders = {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    };
+
     if (!ids || ids.length === 0) {
-      return NextResponse.json({ roster: [] });
+      return NextResponse.json({ roster: [] }, { headers: noCacheHeaders });
     }
 
     // Retrieve active roster keys
@@ -82,7 +88,7 @@ export async function GET(req: NextRequest) {
       await redis.srem(setKey, ...expiredIds);
     }
 
-    return NextResponse.json({ roster: activeRoster });
+    return NextResponse.json({ roster: activeRoster }, { headers: noCacheHeaders });
   } catch (err) {
     console.error('Error fetching roster:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -32,7 +32,16 @@ export async function GET(req: NextRequest) {
       return msg;
     });
 
-    return NextResponse.json({ messages: parsedMessages });
+    return NextResponse.json(
+      { messages: parsedMessages },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (err) {
     console.error('Error polling signals from Redis:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
