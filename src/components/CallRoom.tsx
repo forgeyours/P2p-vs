@@ -100,6 +100,7 @@ export default function CallRoom({
   const compositorRef = useRef<StreamCompositor | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const missingCountRef = useRef<Record<string, number>>({});
+  const rosterRef = useRef<any[]>([]);
 
   // Shared Media elements
   const sharedImageRef = useRef<HTMLImageElement | null>(null);
@@ -197,6 +198,7 @@ export default function CallRoom({
       const activeList = await fetchRoster(roomId);
       if (activeList) {
         setRoster(activeList);
+        rosterRef.current = activeList;
 
         // For any newly connected peer, initiate WebRTC peer connection
         activeList.forEach((peer) => {
@@ -292,7 +294,7 @@ export default function CallRoom({
         }
 
         if (pcmRef.current) {
-          const peer = roster.find((p) => p.id === sig.from);
+          const peer = rosterRef.current.find((p) => p.id === sig.from);
           const peerRole = peer ? peer.role : 'guest';
 
           // Same rule as syncRoster: only the host talks to spectators. If this
@@ -370,7 +372,7 @@ export default function CallRoom({
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
-  }, [localId, roster, roomId, role, hostSecret]);
+  }, [localId, roomId, role, hostSecret]);
 
   const handlePeerDisconnect = (peerId: string) => {
     addLog(`[WEBRTC DIAGNOSTIC] handlePeerDisconnect called for peerId=${peerId}`);
