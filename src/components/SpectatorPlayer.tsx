@@ -65,6 +65,13 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
     };
   }, [roomId, spectatorId]);
 
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      addLog('[WEBRTC DIAGNOSTIC] Attached stream to video element via effect.');
+    }
+  }, [stream]);
+
   const handleIncomingSignal = async (
     fromId: string,
     type: 'offer' | 'answer' | 'ice-candidate' | 'kick',
@@ -100,9 +107,6 @@ export default function SpectatorPlayer({ roomId }: SpectatorPlayerProps) {
         if (e.streams && e.streams[0]) {
           addLog(`[WEBRTC DIAGNOSTIC] Spectator received host media stream ID=${e.streams[0].id}`);
           setStream(e.streams[0]);
-          if (videoRef.current) {
-            videoRef.current.srcObject = e.streams[0];
-          }
         }
       };
     }
